@@ -28,21 +28,20 @@
         .memorize-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
         .quran-text { text-align: center; padding: 20px; margin-bottom: 250px; cursor: default; min-height: 50vh; }
         
-        .ayah { display: inline-block; padding: 4px 12px; margin: 4px; border-radius: 12px; border: 1px solid #f0f0f0; transition: 0.4s all ease; position: relative; opacity: 1; }
+        .ayah { display: inline-block; padding: 4px 12px; margin: 4px; border-radius: 12px; border: 1px solid #f0f0f0; transition: 0.5s all ease; position: relative; opacity: 1; filter: blur(0); }
         .active-ayah { background: #d1fae5 !important; border-color: var(--accent) !important; font-weight: bold; transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.1); opacity: 1 !important; }
 
-        /* وضع التسميع الغيبي: إخفاء الآيات التالية */
-        .reciting-mode .ayah { opacity: 0; pointer-events: none; }
-        .reciting-mode .ayah.revealed { opacity: 1; pointer-events: auto; }
-        .reciting-mode .active-ayah { opacity: 1; }
+        /* وضع التسميع الغيبي: إخفاء كلي للآيات القادمة */
+        .reciting-mode .ayah { opacity: 0; filter: blur(15px); pointer-events: none; }
+        .reciting-mode .ayah.revealed { opacity: 1; filter: blur(0); pointer-events: auto; }
 
         .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; font-weight: bold; }
 
         .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
         .speech-status { font-size: 0.85rem; color: #1a5f7a; background: #e0f2f1; margin: 0 20px 8px; border-radius: 20px; min-height: 24px; padding: 5px 15px; display: inline-block; }
         
-        .listening-active { animation: pulse 1.5s infinite; background: #2ecc71 !important; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        .listening-active { animation: pulse 1.5s infinite; background: #2ecc71 !important; border: 2px solid white !important; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -69,13 +68,13 @@
     <div id="loadingMsg" style="text-align:center; padding:50px;">جاري تحميل الآيات...</div>
     <div class="quran-text" id="quranContent"></div>
     <div class="audio-nav">
-        <div id="speechStatus" class="speech-status">جاهز للتسميع...</div>
+        <div id="speechStatus" class="speech-status">اضغط ابدأ ثم اقرأ الآية الأولى</div>
         <div class="controls-row" style="margin-bottom: 10px;">
-            <button id="recBtn" class="btn-rec" onclick="toggleSpeech()" style="background: #ef4444; color: white; border:none; border-radius: 50px; padding: 10px 25px; font-weight: bold; cursor:pointer;">🎙️ بدء التسميع</button>
+            <button id="recBtn" class="btn-rec" onclick="toggleSpeech()" style="background: #ef4444; color: white; border:none; border-radius: 50px; padding: 10px 25px; font-weight: bold; cursor:pointer; transition: 0.3s;">🎙️ بدء التسميع</button>
         </div>
         <audio id="audioElement" onended="handleAyahEnd()"></audio>
         <div class="btns">
-            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ استماع للمراجعة</button>
+            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ استماع</button>
             <button onclick="completeDay()" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">✅ تم الحفظ</button>
             <button onclick="closeViewer()" style="background:#333; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">❌ إغلاق</button>
         </div>
@@ -96,16 +95,19 @@
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = true;
-        recognition.interimResults = true;
+        recognition.interimResults = true; // السماح بنتائج مؤقتة لتحسين الاستجابة
         recognition.lang = 'ar-SA';
 
         recognition.onresult = (event) => {
-            let result = event.results[event.results.length - 1];
-            let transcript = result[0].transcript.trim();
-            document.getElementById('speechStatus').innerText = "أسمعك: " + transcript;
-            if (result.isFinal) {
-                smartMatch(transcript.toLowerCase());
+            let transcript = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                transcript += event.results[i][0].transcript;
             }
+            
+            document.getElementById('speechStatus').innerText = "أسمعك: " + transcript;
+            
+            // التمرير الذكي للمطابقة
+            smartMatch(transcript.toLowerCase());
         };
         recognition.onend = () => { if (isListening) recognition.start(); };
     }
@@ -122,39 +124,42 @@
     }
 
     function smartMatch(spokenText) {
-        const cleanSpoken = normalize(spokenText);
-        const spokenWords = cleanSpoken.split(" ");
-        
-        // البحث في نطاق الآيات القادمة فقط
-        const start = currentAyahIndex;
-        const end = Math.min(ayahsInView.length, currentAyahIndex + 6);
+        if (currentAyahIndex >= ayahsInView.length) return;
 
-        for (let i = start; i < end; i++) {
-            const ayah = ayahsInView[i];
-            const lastWord = spokenWords[spokenWords.length - 1];
+        const cleanSpoken = normalize(spokenText);
+        const targetAyah = ayahsInView[currentAyahIndex];
+        const targetWords = targetAyah.normalizedText.split(" ");
+        
+        // حساب عدد الكلمات المطابقة في الآية الحالية
+        let matchCount = 0;
+        targetWords.forEach(word => {
+            if (cleanSpoken.includes(word)) matchCount++;
+        });
+
+        // نسبة المطابقة (يجب قراءة 60% من كلمات الآية على الأقل لتظهر)
+        const matchRatio = matchCount / targetWords.length;
+
+        if (matchRatio >= 0.6) {
+            revealAyah(currentAyahIndex);
+            currentAyahIndex++; // لا ننتقل للآية التالية برمجياً إلا بعد "إظهار" الحالية
             
-            if (ayah.normalizedText.includes(lastWord) || ayah.normalizedText.includes(cleanSpoken)) {
-                revealToAyah(i);
-                return;
-            }
+            // تصفير النص المسجل داخلياً لبدء مطابقة الآية الجديدة (اختياري حسب المتصفح)
+            // في continuous mode نعتمد على أن النص القادم سيتطابق مع الآية التالية
         }
     }
 
-    // دالة لإظهار الآيات حتى الوصول للآية الحالية
-    function revealToAyah(index) {
-        currentAyahIndex = index;
-        ayahsInView.forEach((ayah, i) => {
-            const el = document.getElementById(ayah.elementId);
-            if (i <= index) {
-                el.classList.add('revealed');
-            }
-            if (i === index) {
-                el.classList.add('active-ayah');
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } else {
-                el.classList.remove('active-ayah');
-            }
-        });
+    function revealAyah(index) {
+        const ayah = ayahsInView[index];
+        const el = document.getElementById(ayah.elementId);
+        el.classList.add('revealed');
+        el.classList.add('active-ayah');
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // إزالة التميز عن الآية السابقة
+        if (index > 0) {
+            const prevEl = document.getElementById(ayahsInView[index-1].elementId);
+            prevEl.classList.remove('active-ayah');
+        }
     }
 
     async function openViewer(dayIdx, start, end) {
@@ -162,7 +167,6 @@
         currentAyahIndex = 0;
         document.getElementById('mainUI').style.display = 'none';
         document.getElementById('viewer').style.display = 'block';
-        document.getElementById('quranContent').classList.remove('reciting-mode');
         const content = document.getElementById('quranContent');
         content.innerHTML = ""; ayahsInView = [];
         document.getElementById('loadingMsg').style.display = 'block';
@@ -175,7 +179,7 @@
                 data.data.ayahs.forEach(ayah => {
                     const ayahId = `ayah-${ayah.number}`;
                     const span = document.createElement('span');
-                    span.className = 'ayah revealed'; // تبدأ ظاهرة في وضع المراجعة
+                    span.className = 'ayah'; 
                     span.id = ayahId;
                     span.innerHTML = `<span class="ayah-text">${ayah.text}</span><span class="ayah-num">﴿${ayah.numberInSurah}﴾</span>`;
                     content.appendChild(span);
@@ -187,7 +191,6 @@
                     });
                 });
             }
-            revealToAyah(0);
         } catch (e) { content.innerHTML = "خطأ في الاتصال بالخادم."; }
         document.getElementById('loadingMsg').style.display = 'none';
     }
@@ -197,50 +200,35 @@
         
         if (!isListening) {
             isListening = true;
-            // تفعيل وضع التسميع (إخفاء الآيات) وإيقاف أي صوت خارجي
             document.getElementById('quranContent').classList.add('reciting-mode');
             audio.pause(); 
-            audio.currentTime = 0;
+            
+            // إعادة ضبط التسميع من البداية
+            currentAyahIndex = 0;
+            document.querySelectorAll('.ayah').forEach(el => el.classList.remove('revealed', 'active-ayah'));
 
             recognition.start();
             document.getElementById('recBtn').classList.add('listening-active');
-            document.getElementById('recBtn').innerText = "🛑 توقف";
-            document.getElementById('speechStatus').innerText = "بدأ التسميع.. اقرأ الآن";
+            document.getElementById('recBtn').innerText = "🛑 إنهاء التسميع";
         } else {
             isListening = false;
             recognition.stop();
             document.getElementById('recBtn').classList.remove('listening-active');
             document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
+            document.getElementById('quranContent').classList.remove('reciting-mode');
+            document.querySelectorAll('.ayah').forEach(el => el.classList.add('revealed'));
         }
-    }
-
-    function playAyah(num) {
-        // إيقاف وضع التسميع عند طلب الاستماع الصوتي للمراجعة
-        document.getElementById('quranContent').classList.remove('reciting-mode');
-        isListening = false;
-        recognition.stop();
-        document.getElementById('recBtn').classList.remove('listening-active');
-        document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
-
-        currentAyahIndex = ayahsInView.findIndex(a => a.number === num);
-        audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${num}.mp3`;
-        audio.play();
-        revealToAyah(currentAyahIndex);
     }
 
     function togglePlay() {
         if (audio.paused) { 
-            if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number); 
-        } else { 
-            audio.pause(); 
-        }
+            audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${ayahsInView[0].number}.mp3`;
+            audio.play(); 
+        } else { audio.pause(); }
     }
 
     function handleAyahEnd() {
-        if (currentAyahIndex < ayahsInView.length - 1) {
-            currentAyahIndex++;
-            playAyah(ayahsInView[currentAyahIndex].number);
-        }
+        // منطق الاستماع المتتالي (اختياري)
     }
 
     function init() {
@@ -270,8 +258,6 @@
     function updateDuration() {
         totalDays = parseInt(document.getElementById('daysInput').value) || 180;
         localStorage.setItem('q_days_v9', totalDays);
-        completedDays = [];
-        localStorage.setItem('q_done_v9', "[]");
         renderGrids(); updateProgressBar();
     }
 
@@ -293,8 +279,6 @@
         document.getElementById('mainUI').style.display = 'block';
         document.getElementById('viewer').style.display = 'none';
         audio.pause();
-        document.getElementById('recBtn').classList.remove('listening-active');
-        document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
     }
 
     function switchTab(tab) {
