@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مصحف الحفظ الذكي</title>
+    <style>
+        :root { --primary: #1a5f7a; --accent: #159895; --bg: #f8faf9; --text: #2c3333; }
+        body { font-family: 'Amiri', serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; line-height: 2.3; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        
+        h1 { text-align: center; color: var(--primary); font-size: 1.5rem; margin-bottom: 15px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; cursor: pointer; background: #eee; font-weight: bold; font-family: 'Amiri'; }
+        .tab-btn.active { background: var(--primary); color: white; }
+
+        .settings-box { background: #eef2f3; padding: 15px; border-radius: 15px; margin-bottom: 20px; text-align: center; font-size: 0.9rem; }
+        .settings-box input { width: 60px; padding: 5px; text-align: center; border-radius: 5px; border: 1px solid #ccc; }
+
+        .progress-container { background: #eee; border-radius: 10px; height: 10px; margin: 15px 0; overflow: hidden; }
+        .progress-bar { background: var(--accent); height: 100%; width: 0%; transition: 0.5s; }
+
+        .plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+        .day-card { border: 1px solid #eee; padding: 12px; border-radius: 12px; text-align: center; cursor: pointer; background: white; transition: 0.2s; position: relative; }
+        .day-card.completed { border-right: 5px solid #2ecc71; background: #f0fff4; }
+        .day-card strong { display: block; color: var(--primary); }
+
+        .memorize-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
+        .quran-text { text-align: center; padding: 20px; margin-bottom: 250px; cursor: default; min-height: 50vh; }
+        
+        .ayah { 
+            display: inline-block; 
+            padding: 4px 8px; 
+            margin: 2px;
+            border-radius: 8px; 
+            cursor: pointer !important; 
+            border: 1px solid transparent;
+            transition: 0.3s;
+        }
+        .ayah:hover { background: rgba(21, 152, 149, 0.1); border-color: var(--accent); }
+        .active-ayah { background: #d1fae5 !important; border-color: var(--accent) !important; font-weight: bold; transform: scale(1.05); }
+
+        /* تعديل خاصية الإخفاء لتستهدف النص فقط وتستثني الأرقام */
+        .blur .ayah-text { filter: blur(14px); user-select: none; opacity: 0.3; }
+        .blur .ayah-num { filter: none; opacity: 1; color: var(--primary); font-weight: bold; }
+
+        .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; }
+
+        .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
+        .controls-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        .btns { display: flex; justify-content: center; gap: 5px; flex-wrap: wrap; }
+        button { border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: 'Amiri'; }
+        
+        .btn-play { background: #f59e0b; color: white; }
+        .btn-rec { background: #ef4444; color: white; transition: 0.3s; }
+        .btn-rec.listening { background: #2ecc71; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); } }
+        
+        .btn-repeat { background: #6c757d; color: white; }
+        .btn-repeat.active { background: #2ecc71; }
+        .btn-done { background: var(--accent); color: white; }
+        .btn-close { background: #333; color: white; }
+
+        .speech-status { font-size: 0.8rem; color: #e67e22; display: block; margin-top: 5px; min-height: 20px; font-weight: bold; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="container" id="mainUI">
+    <h1>📖 رفيق المصحف الذكي</h1>
+    
+    <div class="tabs">
+        <button id="tabHifz" class="tab-btn active" onclick="switchTab('hifz')">خطة الحفظ</button>
+        <button id="tabReview" class="tab-btn" onclick="switchTab('review')">المراجعة</button>
+    </div>
+
+    <div id="hifzSection">
+        <div class="settings-box">
+            مدة الختم: <input type="number" id="daysInput" value="180"> يوم 
+            <button onclick="updateDuration()" style="background:var(--primary); color:white; padding:2px 8px; border-radius:4px;">تحديث</button>
+        </div>
+        <div class="progress-container"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="plan-grid" id="planGrid"></div>
+    </div>
+
+    <div id="reviewSection" style="display:none;">
+        <p style="text-align:center; color:#7f8c8d;">الأيام المكتملة للمراجعة</p>
+        <div class="plan-grid" id="reviewGrid"></div>
+    </div>
+</div>
+
+<div class="memorize-viewer" id="viewer">
+    <div id="loadingMsg" style="text-align:center; padding:50px;">جاري تحميل الآيات...</div>
+    <div class="quran-text" id="quranContent"></div>
+    
+    <div class="audio-nav">
+        <div class="speech-status" id="speechStatus">جاهز.. اضغط "بدء التسميع"</div>
+        <div class="controls-row">
+            <button id="recBtn" class="btn-rec" onclick="toggleSpeech()">🎙️ بدء التسميع</button>
+            <span style="font-size:0.8rem;">خط: 
+                <button onclick="changeFontSize(-2)">-</button> 
+                <span id="fontSizeVal">24</span> 
+                <button onclick="changeFontSize(2)">+</button>
+            </span>
+            <button id="repeatBtn" class="btn-repeat" onclick="toggleRepeat()">🔁 تكرار: <span id="repTxt">لا</span></button>
+        </div>
+        <audio id="audioElement" onended="handleAyahEnd()"></audio>
+        <div class="btns">
+            <button class="btn-play" id="playPauseBtn" onclick="togglePlay()">▶️ تشغيل القارئ</button>
+            <button class="btn-hide" onclick="toggleBlur()" id="blurBtn" style="background:var(--primary); color:white;">👁️ إخفاء النص</button>
+            <button id="actionBtn" class="btn-done" onclick="completeDay()">✅ تم الحفظ</button>
+            <button class="btn-close" onclick="closeViewer()">❌ إغلاق</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const totalPages = 604;
+    let totalDays = localStorage.getItem('q_days_v4') || 180;
+    let completedDays = JSON.parse(localStorage.getItem('q_done_v4')) || [];
+    let ayahsInView = [];
+    let currentAyahIndex = 0;
+    let isRepeatEnabled = false;
+    let currentFontSize = 24;
+    let recognition;
+    let isListening = false;
+    const audio = document.getElementById('audioElement');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'ar-SA';
+
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0].transcript)
+                .join('');
+            
+            document.getElementById('speechStatus').innerText = "جاري الاستماع: " + transcript.split(' ').slice(-3).join(' ');
+            matchSpeechToAyah(transcript);
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech error:", event.error);
+            if (event.error === 'not-allowed') {
+                alert("يرجى السماح بالوصول للميكروفون من إعدادات المتصفح");
+                stopListeningMode();
+            }
+        };
+
+        recognition.onend = () => {
+            if (isListening) recognition.start();
+        };
+    }
+
+    function init() {
+        document.getElementById('daysInput').value = totalDays;
+        const grid = document.getElementById('planGrid');
+        const rGrid = document.getElementById('reviewGrid');
+        grid.innerHTML = ""; rGrid.innerHTML = "";
+        
+        const pagesPerDay = totalPages / totalDays;
+
+        for (let i = 0; i < totalDays; i++) {
+            const startP = Math.floor(i * pagesPerDay) + 1;
+            const endP = Math.floor((i + 1) * pagesPerDay);
+            const finalEndP = endP > totalPages ? totalPages : endP;
+            
+            const card = createCard(i, startP, finalEndP);
+            grid.appendChild(card);
+
+            if (completedDays.includes(i)) {
+                const rCard = createCard(i, startP, finalEndP, true);
+                rGrid.appendChild(rCard);
+            }
+        }
+        updateProgressBar();
+    }
+
+    function createCard(i, s, e, isReview = false) {
+        const div = document.createElement('div');
+        div.className = `day-card ${completedDays.includes(i) ? 'completed' : ''}`;
+        div.innerHTML = `<strong>يوم ${i + 1}</strong><small>ص ${s}-${e}</small>`;
+        div.onclick = () => openViewer(i, s, e, isReview);
+        return div;
+    }
+
+    async function openViewer(dayIdx, start, end, isReview) {
+        window.activeDay = dayIdx;
+        document.getElementById('mainUI').style.display = 'none';
+        document.getElementById('viewer').style.display = 'block';
+        document.getElementById('actionBtn').style.display = isReview ? 'none' : 'inline-block';
+        
+        const content = document.getElementById('quranContent');
+        content.innerHTML = ""; ayahsInView = [];
+        document.getElementById('loadingMsg').style.display = 'block';
+
+        try {
+            for (let p = start; p <= end; p++) {
+                const res = await fetch(`https://api.alquran.cloud/v1/page/${p}/quran-uthmani`);
+                const data = await res.json();
+                content.innerHTML += `<div style="color:var(--primary); font-size:0.9rem; border-bottom:1px solid #eee; margin:20px 0;">صفحة ${p}</div>`;
+                data.data.ayahs.forEach(ayah => {
+                    const cleanText = ayah.text.replace(/[\u064B-\u065F]/g, "").replace(/[إأآا]/g, "ا");
+                    
+                    // تعديل الهيكلية هنا: فصل النص عن الرقم
+                    content.innerHTML += `
+                        <span class="ayah" id="ayah-${ayah.number}" onclick="playAyah(${ayah.number})">
+                            <span class="ayah-text">${ayah.text}</span>
+                            <span class="ayah-num">﴿${ayah.numberInSurah}﴾</span>
+                        </span>`;
+                    
+                    ayahsInView.push({ number: ayah.number, text: cleanText });
+                });
+            }
+        } catch (e) { content.innerHTML = "حدث خطأ في تحميل الآيات، تحقق من اتصالك"; }
+        document.getElementById('loadingMsg').style.display = 'none';
+    }
+
+    function toggleSpeech() {
+        if (!recognition) {
+            alert("عذراً، متصفحك لا يدعم التعرف الصوتي. يرجى استخدام Chrome على أندرويد.");
+            return;
+        }
+        
+        if (!isListening) {
+            isListening = true;
+            recognition.start();
+            document.getElementById('recBtn').classList.add('listening');
+            document.getElementById('recBtn').innerText = "🛑 إيقاف التسميع";
+            document.getElementById('speechStatus').innerText = "تكلم الآن...";
+            document.getElementById('quranContent').classList.add('blur');
+            audio.pause(); 
+        } else {
+            stopListeningMode();
+        }
+    }
+
+    function stopListeningMode() {
+        isListening = false;
+        recognition.stop();
+        document.getElementById('recBtn').classList.remove('listening');
+        document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
+        document.getElementById('speechStatus').innerText = "جاهز.. اضغط بدء التسميع";
+        document.getElementById('quranContent').classList.remove('blur');
+    }
+
+    function matchSpeechToAyah(spokenText) {
+        const cleanSpoken = spokenText.replace(/\s+/g, "").replace(/[إأآا]/g, "ا");
+        let startSearch = Math.max(0, currentAyahIndex - 1);
+        for (let i = startSearch; i < ayahsInView.length; i++) {
+            const ayah = ayahsInView[i];
+            const cleanAyah = ayah.text.replace(/\s+/g, "").replace(/[إأآا]/g, "ا");
+            if (cleanSpoken.includes(cleanAyah.substring(0, 15))) {
+                highlightAyah(ayah.number);
+                currentAyahIndex = i;
+                break;
+            }
+        }
+    }
+
+    function highlightAyah(num) {
+        document.querySelectorAll('.ayah').forEach(el => el.classList.remove('active-ayah'));
+        const active = document.getElementById(`ayah-${num}`);
+        if(active) {
+            active.classList.add('active-ayah');
+            active.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function playAyah(num) {
+        if (isListening) stopListeningMode();
+        currentAyahIndex = ayahsInView.findIndex(a => a.number === num);
+        audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${num}.mp3`;
+        audio.play().catch(e => console.log("تفاعل مع الصفحة أولاً لتشغيل الصوت"));
+        document.getElementById('playPauseBtn').innerHTML = "⏸ مؤقت";
+        highlightAyah(num);
+    }
+
+    function togglePlay() {
+        if (audio.paused) { 
+            if(ayahsInView.length > 0) {
+                if(!audio.src) playAyah(ayahsInView[0].number);
+                else audio.play();
+                document.getElementById('playPauseBtn').innerHTML = "⏸ مؤقت";
+            }
+        } else { 
+            audio.pause(); 
+            document.getElementById('playPauseBtn').innerHTML = "▶️ تشغيل القارئ"; 
+        }
+    }
+
+    function handleAyahEnd() {
+        if (isRepeatEnabled) { audio.currentTime = 0; audio.play(); }
+        else if (currentAyahIndex < ayahsInView.length - 1) {
+            playAyah(ayahsInView[currentAyahIndex + 1].number);
+        }
+    }
+
+    function toggleBlur() {
+        const content = document.getElementById('quranContent');
+        content.classList.toggle('blur');
+        document.getElementById('blurBtn').innerText = content.classList.contains('blur') ? "👁️ إظهار النص" : "👁️ إخفاء النص";
+    }
+
+    function switchTab(tab) {
+        document.getElementById('hifzSection').style.display = tab === 'hifz' ? 'block' : 'none';
+        document.getElementById('reviewSection').style.display = tab === 'review' ? 'block' : 'none';
+        document.getElementById('tabHifz').classList.toggle('active', tab === 'hifz');
+        document.getElementById('tabReview').classList.toggle('active', tab === 'review');
+    }
+
+    function toggleRepeat() {
+        isRepeatEnabled = !isRepeatEnabled;
+        document.getElementById('repeatBtn').classList.toggle('active');
+        document.getElementById('repTxt').innerText = isRepeatEnabled ? "نعم" : "لا";
+    }
+
+    function changeFontSize(d) {
+        currentFontSize += d;
+        document.getElementById('quranContent').style.fontSize = currentFontSize + 'px';
+        document.getElementById('fontSizeVal').innerText = currentFontSize;
+    }
+
+    function updateDuration() {
+        totalDays = document.getElementById('daysInput').value;
+        localStorage.setItem('q_days_v4', totalDays);
+        completedDays = []; 
+        localStorage.setItem('q_done_v4', "[]");
+        init();
+    }
+
+    function completeDay() {
+        if (!completedDays.includes(window.activeDay)) {
+            completedDays.push(window.activeDay);
+            localStorage.setItem('q_done_v4', JSON.stringify(completedDays));
+        }
+        closeViewer(); init();
+    }
+
+    function closeViewer() {
+        if (isListening) stopListeningMode();
+        document.getElementById('mainUI').style.display = 'block';
+        document.getElementById('viewer').style.display = 'none';
+        audio.pause();
+    }
+
+    function updateProgressBar() {
+        const p = ((completedDays.length / totalDays) * 100).toFixed(1);
+        document.getElementById('progressBar').style.width = p + "%";
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
