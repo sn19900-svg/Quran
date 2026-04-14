@@ -104,6 +104,7 @@
     let currentFontSize = 24;
     let recognition;
     let isListening = false;
+    let finalTranscript = ""; // الإصلاح: مخزن للنص النهائي لتجنب التراكم اللا نهائي
     const audio = document.getElementById('audioElement');
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -114,22 +115,25 @@
         recognition.lang = 'ar-SA';
 
         recognition.onresult = (event) => {
-            let currentTranscript = "";
+            let interimTranscript = "";
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                currentTranscript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
             }
             
-            document.getElementById('speechStatus').innerText = "أسمعك: " + currentTranscript.split(' ').slice(-3).join(' ');
+            // دمج النص المؤقت مع النهائي للبحث عن مطابقة فورية
+            const fullSpokenText = (finalTranscript + interimTranscript).toLowerCase();
+            document.getElementById('speechStatus').innerText = "أسمعك: " + interimTranscript.split(' ').slice(-3).join(' ');
             
             if (isListening) {
-                attemptSmartMatch(currentTranscript.toLowerCase());
+                attemptSmartMatch(fullSpokenText);
             }
         };
 
-        // إعادة التشغيل بصمت لتقليل نغمة النظام
-        recognition.onend = () => { 
-            if (isListening) recognition.start(); 
-        };
+        recognition.onend = () => { if (isListening) recognition.start(); };
     }
 
     function normalize(text) {
@@ -156,12 +160,13 @@
 
         const matchRatio = matchCount / targetWords.length;
 
-        // عتبة المطابقة 70% للانتقال التلقائي
+        // عتبة 70% للمطابقة
         if (matchRatio >= 0.7) {
             revealAyahSequential(currentAyahIndex);
             currentAyahIndex++;
-            // تحديث حالة الكلام لإعطاء تنبيه بصري بالنجاح
-            document.getElementById('speechStatus').innerText = "ممتاز.. أكمل الآية التالية";
+            // الإصلاح: تصفير المتغير بمجرد النجاح للسماح بمطابقة الآية التالية دون تداخل
+            finalTranscript = ""; 
+            document.getElementById('speechStatus').innerText = "أحسنت! أكمل الآية التالية...";
         }
     }
 
@@ -216,6 +221,7 @@
         if (!isListening) {
             isListening = true;
             currentAyahIndex = 0;
+            finalTranscript = ""; // تصفير عند البداية
             audio.pause();
             
             document.getElementById('quranContent').classList.add('reciting-mode');
@@ -224,7 +230,7 @@
             recognition.start();
             document.getElementById('recBtn').classList.add('listening-active');
             document.getElementById('recBtn').innerText = "🛑 إيقاف التسميع";
-            document.getElementById('speechStatus').innerText = "أنا أسمعك.. ابدأ القراءة";
+            document.getElementById('speechStatus').innerText = "جاهز.. ابدأ القراءة الآن";
         } else {
             stopListening();
         }
@@ -245,7 +251,8 @@
         audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${num}.mp3`;
         audio.play();
         document.querySelectorAll('.ayah').forEach(a => a.classList.remove('active-ayah'));
-        document.getElementById(`ayah-${num}`).classList.add('active-ayah');
+        const el = document.getElementById(`ayah-${num}`);
+        if(el) el.classList.add('active-ayah');
     }
 
     function togglePlay() {
@@ -285,6 +292,7 @@
     function renderGrids() {
         const grid = document.getElementById('planGrid');
         const rGrid = document.getElementById('reviewGrid');
+        if(!grid || !rGrid) return;
         grid.innerHTML = ""; rGrid.innerHTML = "";
         const pagesPerDay = totalPages / totalDays;
         for (let i = 0; i < totalDays; i++) {
@@ -309,7 +317,8 @@
 
     function updateProgressBar() {
         const p = (completedDays.length / totalDays) * 100;
-        document.getElementById('progressBar').style.width = p + "%";
+        const bar = document.getElementById('progressBar');
+        if(bar) bar.style.width = p + "%";
     }
 
     function completeDay() {
