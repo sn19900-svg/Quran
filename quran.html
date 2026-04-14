@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مصحف الحفظ الذكي Pro - النسخة الشاملة</title>
+    <title>مصحف الحفظ الذكي Pro - النسخة المدمجة</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #159895; --bg: #f8faf9; --text: #2c3333; }
         body { font-family: 'Amiri', serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; line-height: 2.3; }
@@ -26,26 +26,30 @@
         .day-card strong { display: block; color: var(--primary); }
 
         .memorize-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
-        .quran-text { text-align: center; padding: 20px; margin-bottom: 250px; cursor: default; min-height: 50vh; }
+        .quran-text { text-align: center; padding: 20px; margin-bottom: 250px; cursor: default; min-height: 50vh; font-size: 24px; transition: font-size 0.3s ease; }
         
         .ayah { display: inline-block; padding: 4px 12px; margin: 4px; border-radius: 12px; border: 1px solid #f0f0f0; transition: 0.4s all ease; position: relative; cursor: pointer; }
         .active-ayah { background: #d1fae5 !important; border-color: var(--accent) !important; font-weight: bold; transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 
-        /* وضع الإخفاء اليدوي */
-        .manual-blur .ayah-text { filter: blur(8px); opacity: 0.3; }
+        /* وضع الإخفاء (طمس النص مع بقاء الرقم) */
+        .manual-blur .ayah-text { filter: blur(12px); opacity: 0.3; user-select: none; }
         .manual-blur .active-ayah .ayah-text { filter: blur(0); opacity: 1; }
+        .manual-blur .ayah-num { filter: none !important; opacity: 1 !important; color: var(--primary); }
 
         /* وضع التسميع الغيبي (إخفاء تام) */
         .reciting-mode .ayah { opacity: 0; pointer-events: none; }
         .reciting-mode .ayah.revealed { opacity: 1; pointer-events: auto; }
 
-        .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; font-weight: bold; }
+        .ayah-num { font-size: 0.8em; color: var(--accent); margin-right: 5px; font-weight: bold; }
 
         .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
-        .speech-status { font-size: 0.85rem; color: #1a5f7a; background: #e0f2f1; margin: 0 20px 8px; border-radius: 20px; min-height: 24px; padding: 5px 15px; display: inline-block; }
+        .speech-status { font-size: 0.85rem; color: #e67e22; background: #fff3e0; margin: 0 20px 8px; border-radius: 20px; min-height: 24px; padding: 5px 15px; display: inline-block; font-weight: bold; }
         
-        .listening-active { animation: pulse 1.5s infinite; background: #2ecc71 !important; }
+        .listening-active { animation: pulse 1.5s infinite; background: #2ecc71 !important; border-color: white !important; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        .font-controls { display: inline-flex; align-items: center; gap: 5px; margin: 0 10px; background: #eee; padding: 5px 10px; border-radius: 10px; }
+        .font-controls button { width: 25px; height: 25px; padding: 0; line-height: 1; }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -73,13 +77,21 @@
     <div class="quran-text" id="quranContent"></div>
     <div class="audio-nav">
         <div id="speechStatus" class="speech-status">جاهز...</div>
-        <div class="controls-row" style="margin-bottom: 10px;">
+        <div class="controls-row" style="margin-bottom: 10px; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px;">
             <button id="recBtn" onclick="toggleSpeech()" style="background: #ef4444; color: white; border:none; border-radius: 50px; padding: 10px 25px; font-weight: bold; cursor:pointer;">🎙️ بدء التسميع</button>
-            <button id="repeatBtn" onclick="toggleRepeat()" style="background:#eee; border:none; border-radius:10px; padding: 10px; cursor:pointer; margin-right:5px;">🔁 تكرار: <span id="repTxt">لا</span></button>
+            
+            <div class="font-controls">
+                <span>خط: </span>
+                <button onclick="changeFontSize(-2)">-</button>
+                <b id="fontSizeVal">24</b>
+                <button onclick="changeFontSize(2)">+</button>
+            </div>
+
+            <button id="repeatBtn" onclick="toggleRepeat()" style="background:#eee; border:none; border-radius:10px; padding: 10px; cursor:pointer;">🔁 تكرار: <span id="repTxt">لا</span></button>
         </div>
         <audio id="audioElement" onended="handleAyahEnd()"></audio>
         <div class="btns">
-            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ استماع</button>
+            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ القارئ</button>
             <button onclick="toggleBlur()" id="blurBtn" style="background:var(--primary); color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">👁️ إخفاء النص</button>
             <button onclick="completeDay()" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">✅ تم الحفظ</button>
             <button onclick="closeViewer()" style="background:#333; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">❌ إغلاق</button>
@@ -89,11 +101,12 @@
 
 <script>
     const totalPages = 604;
-    let totalDays = parseInt(localStorage.getItem('q_days_v9')) || 180;
-    let completedDays = JSON.parse(localStorage.getItem('q_done_v9')) || [];
+    let totalDays = parseInt(localStorage.getItem('q_days_v10')) || 180;
+    let completedDays = JSON.parse(localStorage.getItem('q_done_v10')) || [];
     let ayahsInView = [];
     let currentAyahIndex = 0;
     let isRepeatEnabled = false;
+    let currentFontSize = 24;
     let recognition;
     let isListening = false;
     const audio = document.getElementById('audioElement');
@@ -110,7 +123,7 @@
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 transcript += event.results[i][0].transcript;
             }
-            document.getElementById('speechStatus').innerText = "أسمعك: " + transcript;
+            document.getElementById('speechStatus').innerText = "أسمعك: " + transcript.split(' ').slice(-3).join(' ');
             smartMatch(transcript.toLowerCase());
         };
         recognition.onend = () => { if (isListening) recognition.start(); };
@@ -125,15 +138,18 @@
         if (!isListening || currentAyahIndex >= ayahsInView.length) return;
         
         const cleanSpoken = normalize(spokenText);
-        const targetAyah = ayahsInView[currentAyahIndex];
-        const targetWords = targetAyah.normalizedText.split(" ");
-        
-        let matchCount = 0;
-        targetWords.forEach(word => { if (cleanSpoken.includes(word)) matchCount++; });
+        // نبحث في الآية الحالية والآية التي تليها لتجنب التوقف بسبب خطأ بسيط
+        for (let i = currentAyahIndex; i <= currentAyahIndex + 1 && i < ayahsInView.length; i++) {
+            const ayah = ayahsInView[i];
+            const targetWords = ayah.normalizedText.split(" ");
+            let matchCount = 0;
+            targetWords.forEach(word => { if (cleanSpoken.includes(word)) matchCount++; });
 
-        if ((matchCount / targetWords.length) >= 0.6) {
-            revealAyah(currentAyahIndex);
-            currentAyahIndex++;
+            if ((matchCount / targetWords.length) >= 0.6) {
+                revealAyah(i);
+                currentAyahIndex = i + 1;
+                break;
+            }
         }
     }
 
@@ -160,7 +176,7 @@
             for (let p = start; p <= end; p++) {
                 const res = await fetch(`https://api.alquran.cloud/v1/page/${p}/quran-uthmani`);
                 const data = await res.json();
-                content.innerHTML += `<div style="color:var(--primary); font-weight:bold; margin:10px 0;">صفحة ${p}</div>`;
+                content.innerHTML += `<div style="color:var(--primary); font-size:0.9rem; border-bottom:1px solid #eee; margin:20px 0;">صفحة ${p}</div>`;
                 data.data.ayahs.forEach(ayah => {
                     const ayahId = `ayah-${ayah.number}`;
                     const span = document.createElement('span');
@@ -172,12 +188,12 @@
                     ayahsInView.push({ number: ayah.number, normalizedText: normalize(ayah.text), elementId: ayahId });
                 });
             }
-        } catch (e) { content.innerHTML = "خطأ في التحميل."; }
+        } catch (e) { content.innerHTML = "خطأ في الاتصال، يرجى المحاولة لاحقاً."; }
         document.getElementById('loadingMsg').style.display = 'none';
     }
 
     function toggleSpeech() {
-        if (!recognition) return alert("المتصفح لا يدعم الصوت.");
+        if (!recognition) return alert("المتصفح لا يدعم التعرف الصوتي.");
         if (!isListening) {
             isListening = true;
             currentAyahIndex = 0;
@@ -186,18 +202,25 @@
             document.querySelectorAll('.ayah').forEach(el => el.classList.remove('revealed', 'active-ayah'));
             recognition.start();
             document.getElementById('recBtn').classList.add('listening-active');
-            document.getElementById('recBtn').innerText = "🛑 توقف";
+            document.getElementById('recBtn').innerText = "🛑 إيقاف";
+            document.getElementById('speechStatus').innerText = "تكلم الآن...";
         } else {
-            isListening = false;
-            recognition.stop();
-            document.getElementById('recBtn').classList.remove('listening-active');
-            document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
-            document.getElementById('quranContent').classList.remove('reciting-mode');
-            document.querySelectorAll('.ayah').forEach(el => el.classList.add('revealed'));
+            stopListeningMode();
         }
     }
 
+    function stopListeningMode() {
+        isListening = false;
+        recognition.stop();
+        document.getElementById('recBtn').classList.remove('listening-active');
+        document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
+        document.getElementById('quranContent').classList.remove('reciting-mode');
+        document.querySelectorAll('.ayah').forEach(el => el.classList.add('revealed'));
+        document.getElementById('speechStatus').innerText = "جاهز...";
+    }
+
     function playAyah(num) {
+        if (isListening) stopListeningMode();
         currentAyahIndex = ayahsInView.findIndex(a => a.number === num);
         audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${num}.mp3`;
         audio.play();
@@ -206,8 +229,9 @@
     }
 
     function togglePlay() {
-        if (audio.paused) { playAyah(ayahsInView[currentAyahIndex].number); } 
-        else { audio.pause(); }
+        if (audio.paused) { 
+            if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number);
+        } else { audio.pause(); }
     }
 
     function handleAyahEnd() {
@@ -221,6 +245,8 @@
     function toggleRepeat() {
         isRepeatEnabled = !isRepeatEnabled;
         document.getElementById('repTxt').innerText = isRepeatEnabled ? "نعم" : "لا";
+        document.getElementById('repeatBtn').style.background = isRepeatEnabled ? "#2ecc71" : "#eee";
+        document.getElementById('repeatBtn').style.color = isRepeatEnabled ? "white" : "black";
     }
 
     function toggleBlur() {
@@ -229,8 +255,14 @@
         document.getElementById('blurBtn').innerText = content.classList.contains('manual-blur') ? "👁️ إظهار" : "👁️ إخفاء";
     }
 
-    // دوال النظام الأساسية
+    function changeFontSize(d) {
+        currentFontSize += d;
+        document.getElementById('quranContent').style.fontSize = currentFontSize + 'px';
+        document.getElementById('fontSizeVal').innerText = currentFontSize;
+    }
+
     function init() { document.getElementById('daysInput').value = totalDays; renderGrids(); updateProgressBar(); }
+
     function renderGrids() {
         const grid = document.getElementById('planGrid');
         const rGrid = document.getElementById('reviewGrid');
@@ -238,18 +270,43 @@
         const pagesPerDay = totalPages / totalDays;
         for (let i = 0; i < totalDays; i++) {
             const startP = Math.floor(i * pagesPerDay) + 1;
+            const endP = Math.floor((i + 1) * pagesPerDay);
             const card = document.createElement('div');
             card.className = `day-card ${completedDays.includes(i) ? 'completed' : ''}`;
-            card.innerHTML = `<strong>يوم ${i + 1}</strong>`;
-            card.onclick = () => openViewer(i, startP, Math.floor((i + 1) * pagesPerDay));
+            card.innerHTML = `<strong>يوم ${i + 1}</strong><small>ص ${startP}-${endP > 604 ? 604 : endP}</small>`;
+            card.onclick = () => openViewer(i, startP, endP > 604 ? 604 : endP);
             grid.appendChild(card);
             if (completedDays.includes(i)) rGrid.appendChild(card.cloneNode(true));
         }
     }
-    function updateDuration() { totalDays = parseInt(document.getElementById('daysInput').value) || 180; localStorage.setItem('q_days_v9', totalDays); renderGrids(); }
-    function updateProgressBar() { document.getElementById('progressBar').style.width = (completedDays.length / totalDays * 100) + "%"; }
-    function completeDay() { if (!completedDays.includes(window.activeDay)) { completedDays.push(window.activeDay); localStorage.setItem('q_done_v9', JSON.stringify(completedDays)); } closeViewer(); renderGrids(); updateProgressBar(); }
-    function closeViewer() { isListening = false; if(recognition) recognition.stop(); document.getElementById('mainUI').style.display = 'block'; document.getElementById('viewer').style.display = 'none'; audio.pause(); }
+
+    function updateDuration() {
+        totalDays = parseInt(document.getElementById('daysInput').value) || 180;
+        localStorage.setItem('q_days_v10', totalDays);
+        completedDays = []; localStorage.setItem('q_done_v10', "[]");
+        renderGrids(); updateProgressBar();
+    }
+
+    function updateProgressBar() {
+        const p = (completedDays.length / totalDays) * 100;
+        document.getElementById('progressBar').style.width = p + "%";
+    }
+
+    function completeDay() {
+        if (!completedDays.includes(window.activeDay)) {
+            completedDays.push(window.activeDay);
+            localStorage.setItem('q_done_v10', JSON.stringify(completedDays));
+        }
+        closeViewer(); renderGrids(); updateProgressBar();
+    }
+
+    function closeViewer() {
+        if (isListening) stopListeningMode();
+        document.getElementById('mainUI').style.display = 'block';
+        document.getElementById('viewer').style.display = 'none';
+        audio.pause();
+    }
+
     function switchTab(tab) {
         document.getElementById('hifzSection').style.display = tab === 'hifz' ? 'block' : 'none';
         document.getElementById('reviewSection').style.display = tab === 'review' ? 'block' : 'none';
