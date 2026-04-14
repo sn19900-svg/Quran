@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مصحف الحفظ الذكي Pro - المطور</title>
+    <title>مصحف الحفظ الذكي Pro - النسخة المصلحة</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #159895; --bg: #f8faf9; --text: #2c3333; }
         body { font-family: 'Amiri', serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; line-height: 2.3; }
@@ -36,8 +36,8 @@
         .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; font-weight: bold; }
 
         .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
-        .speech-status { font-size: 0.9rem; color: #d35400; font-weight: bold; margin-bottom: 8px; height: 24px; }
-        .btn-rec.listening { background: #2ecc71; animation: pulse 1.5s infinite; color: white; }
+        .speech-status { font-size: 0.9rem; color: #d35400; font-weight: bold; margin-bottom: 8px; height: 24px; padding: 0 10px; }
+        .btn-rec.listening { background: #2ecc71 !important; animation: pulse 1.5s infinite; color: white; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); } }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
@@ -46,35 +46,29 @@
 
 <div class="container" id="mainUI">
     <h1>📖 رفيق المصحف الذكي</h1>
-    
     <div class="tabs">
         <button id="tabHifz" class="tab-btn active" onclick="switchTab('hifz')">خطة الحفظ</button>
         <button id="tabReview" class="tab-btn" onclick="switchTab('review')">المراجعة</button>
     </div>
-
     <div id="hifzSection">
         <div class="settings-box">
             مدة الختم: <input type="number" id="daysInput" value="180"> يوم 
-            <button onclick="updateDuration()" style="background:var(--primary); color:white; border-radius:5px; padding: 5px 15px;">تحديث الخطة</button>
+            <button onclick="updateDuration()" style="background:var(--primary); color:white; border-radius:5px; padding: 5px 15px; cursor:pointer;">تحديث الخطة</button>
         </div>
         <div class="progress-container"><div class="progress-bar" id="progressBar"></div></div>
         <div class="plan-grid" id="planGrid"></div>
     </div>
-
-    <div id="reviewSection" style="display:none;">
-        <div class="plan-grid" id="reviewGrid"></div>
-    </div>
+    <div id="reviewSection" style="display:none;"><div class="plan-grid" id="reviewGrid"></div></div>
 </div>
 
 <div class="memorize-viewer" id="viewer">
-    <div id="loadingMsg" style="text-align:center; padding:50px;">جاري تحميل الآيات من السحاب...</div>
+    <div id="loadingMsg" style="text-align:center; padding:50px;">جاري تحميل الآيات...</div>
     <div class="quran-text" id="quranContent"></div>
-    
     <div class="audio-nav">
-        <div class="speech-status" id="speechStatus">جاهز للتسميع..</div>
+        <div class="speech-status" id="speechStatus">اضغط "بدء التسميع" وابدأ القراءة</div>
         <div class="controls-row" style="margin-bottom: 10px;">
-            <button id="recBtn" class="btn-rec" onclick="toggleSpeech()" style="background: #ef4444; color: white;">🎙️ بدء التسميع</button>
-            <button id="repeatBtn" onclick="toggleRepeat()" style="background:#eee;">🔁 تكرار: <span id="repTxt">لا</span></button>
+            <button id="recBtn" class="btn-rec" onclick="toggleSpeech()" style="background: #ef4444; color: white; border-radius: 8px; padding: 10px 20px; font-weight: bold;">🎙️ بدء التسميع</button>
+            <button id="repeatBtn" onclick="toggleRepeat()" style="background:#eee; padding: 10px;">🔁 تكرار: <span id="repTxt">لا</span></button>
             <span style="font-size:0.8rem; margin: 0 10px;">خط: <button onclick="changeFontSize(-2)">-</button> <span id="fontSizeVal">24</span> <button onclick="changeFontSize(2)">+</button></span>
         </div>
         <audio id="audioElement" onended="handleAyahEnd()"></audio>
@@ -89,19 +83,17 @@
 
 <script>
     const totalPages = 604;
-    // استعادة البيانات أو وضع قيم افتراضية
-    let totalDays = parseInt(localStorage.getItem('q_days_v6')) || 180;
-    let completedDays = JSON.parse(localStorage.getItem('q_done_v6')) || [];
-    
+    let totalDays = parseInt(localStorage.getItem('q_days_v7')) || 180;
+    let completedDays = JSON.parse(localStorage.getItem('q_done_v7')) || [];
     let ayahsInView = [];
     let currentAyahIndex = 0;
     let isRepeatEnabled = false;
     let currentFontSize = 24;
     let recognition;
     let isListening = false;
+    let accumulatedTranscript = ""; // تجميع النص لضمان عدم الضياع
     const audio = document.getElementById('audioElement');
 
-    // إعداد محرك التعرف على الكلام
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
@@ -110,16 +102,20 @@
         recognition.lang = 'ar-SA';
 
         recognition.onresult = (event) => {
-            let lastResultIndex = event.results.length - 1;
-            let transcript = event.results[lastResultIndex][0].transcript;
-            
-            document.getElementById('speechStatus').innerText = "أسمعك: " + transcript;
-            matchSpeechToAyah(transcript);
+            let interimTranscript = "";
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    accumulatedTranscript += event.results[i][0].transcript;
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+            const fullText = accumulatedTranscript + interimTranscript;
+            document.getElementById('speechStatus').innerText = "أسمعك: " + (interimTranscript || accumulatedTranscript.slice(-20));
+            matchSpeechToAyah(fullText);
         };
 
-        recognition.onend = () => { 
-            if (isListening) recognition.start(); 
-        };
+        recognition.onend = () => { if (isListening) recognition.start(); };
     }
 
     function init() {
@@ -132,19 +128,14 @@
         const grid = document.getElementById('planGrid');
         const rGrid = document.getElementById('reviewGrid');
         grid.innerHTML = ""; rGrid.innerHTML = "";
-        
         const pagesPerDay = totalPages / totalDays;
         for (let i = 0; i < totalDays; i++) {
             const startP = Math.floor(i * pagesPerDay) + 1;
             const endP = Math.floor((i + 1) * pagesPerDay);
             const finalEndP = endP > totalPages ? totalPages : endP;
-            
             const card = createCard(i, startP, finalEndP);
             grid.appendChild(card);
-            
-            if (completedDays.includes(i)) {
-                rGrid.appendChild(createCard(i, startP, finalEndP, true));
-            }
+            if (completedDays.includes(i)) rGrid.appendChild(createCard(i, startP, finalEndP, true));
         }
     }
 
@@ -156,9 +147,19 @@
         return div;
     }
 
+    // تنظيف النص العربي بشكل احترافي للمطابقة
+    function cleanArabic(text) {
+        return text
+            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") // إزالة التشكيل وعلامات الوقف
+            .replace(/[إأآا]/g, "ا")
+            .replace(/ة/g, "ه")
+            .replace(/\s+/g, "");
+    }
+
     async function openViewer(dayIdx, start, end, isReview) {
         window.activeDay = dayIdx;
-        currentAyahIndex = 0; // إعادة ضبط الفهرس عند فتح يوم جديد
+        currentAyahIndex = 0;
+        accumulatedTranscript = "";
         document.getElementById('mainUI').style.display = 'none';
         document.getElementById('viewer').style.display = 'block';
         const content = document.getElementById('quranContent');
@@ -171,44 +172,39 @@
                 const data = await res.json();
                 content.innerHTML += `<div style="color:var(--primary); font-weight:bold; margin:20px 0; border-bottom: 2px solid #eee;">صفحة ${p}</div>`;
                 data.data.ayahs.forEach(ayah => {
-                    // تنظيف النص للمطابقة الصامتة
-                    const cleanText = ayah.text.replace(/[\u064B-\u065F]/g, "").replace(/[إأآا]/g, "ا");
                     const ayahId = `ayah-${ayah.number}`;
-                    
                     const span = document.createElement('span');
                     span.className = 'ayah';
                     span.id = ayahId;
                     span.innerHTML = `<span class="ayah-text">${ayah.text}</span><span class="ayah-num">﴿${ayah.numberInSurah}﴾</span>`;
                     span.onclick = () => playAyah(ayah.number);
                     content.appendChild(span);
-
-                    ayahsInView.push({ number: ayah.number, text: cleanText, elementId: ayahId });
+                    ayahsInView.push({ number: ayah.number, text: cleanArabic(ayah.text), elementId: ayahId });
                 });
             }
             if(ayahsInView.length > 0) highlightAyah(ayahsInView[0].number);
-        } catch (e) { 
-            content.innerHTML = "<p style='color:red'>فشل تحميل البيانات. تأكد من اتصالك بالإنترنت.</p>"; 
-        }
+        } catch (e) { content.innerHTML = "<p style='color:red'>خطأ في تحميل البيانات.</p>"; }
         document.getElementById('loadingMsg').style.display = 'none';
     }
 
     function matchSpeechToAyah(spoken) {
-        const cleanSpoken = spoken.replace(/\s+/g, "").replace(/[إأآا]/g, "ا");
-        
-        // البحث عن الآية التالية في نطاق 5 آيات قادمة لضمان المتابعة السلسة
-        const searchRange = 5;
+        const cleanSpoken = cleanArabic(spoken);
+        // البحث في نطاق 7 آيات قادمة لمرونة أكبر
+        const searchRange = 7;
         const start = currentAyahIndex;
         const end = Math.min(ayahsInView.length, currentAyahIndex + searchRange);
 
         for (let i = start; i < end; i++) {
-            const target = ayahsInView[i].text.replace(/\s+/g, "").replace(/[إأآا]/g, "ا");
-            // إذا نطق المستخدم أول 10 حروف من الآية بنجاح
-            if (cleanSpoken.includes(target.substring(0, 10))) {
+            const target = ayahsInView[i].text;
+            // التحقق مما إذا كان الكلام المسموع يحتوي على جزء كبير من الآية (أول 12 حرف)
+            if (cleanSpoken.includes(target.substring(0, 12))) {
                 if (currentAyahIndex !== i) {
                     currentAyahIndex = i;
                     highlightAyah(ayahsInView[i].number);
-                    // التمرير التلقائي للآية
-                    document.getElementById(ayahsInView[i].elementId).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const el = document.getElementById(ayahsInView[i].elementId);
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // تفريغ النص المتراكم جزئياً عند الانتقال لآية جديدة لمنع البطء
+                    if (accumulatedTranscript.length > 100) accumulatedTranscript = accumulatedTranscript.slice(-50);
                 }
                 break;
             }
@@ -222,9 +218,10 @@
     }
 
     function toggleSpeech() {
-        if (!recognition) return alert("متصفحك لا يدعم التعرف على الصوت. استخدم كرووم.");
+        if (!recognition) return alert("المتصفح لا يدعم الميكروفون.");
         if (!isListening) {
             isListening = true;
+            accumulatedTranscript = "";
             recognition.start();
             document.getElementById('recBtn').classList.add('listening');
             document.getElementById('recBtn').innerText = "🛑 توقف";
@@ -245,18 +242,13 @@
     }
 
     function togglePlay() {
-        if (audio.paused) {
-            if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number);
-        } else {
-            audio.pause();
-        }
+        if (audio.paused) { if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number); } 
+        else { audio.pause(); }
     }
 
     function handleAyahEnd() {
-        if (isRepeatEnabled) {
-            audio.currentTime = 0;
-            audio.play();
-        } else if (currentAyahIndex < ayahsInView.length - 1) {
+        if (isRepeatEnabled) { audio.currentTime = 0; audio.play(); } 
+        else if (currentAyahIndex < ayahsInView.length - 1) {
             currentAyahIndex++;
             playAyah(ayahsInView[currentAyahIndex].number);
         }
@@ -265,7 +257,7 @@
     function completeDay() {
         if (!completedDays.includes(window.activeDay)) {
             completedDays.push(window.activeDay);
-            localStorage.setItem('q_done_v6', JSON.stringify(completedDays));
+            localStorage.setItem('q_done_v7', JSON.stringify(completedDays));
         }
         closeViewer();
         renderGrids();
@@ -276,9 +268,9 @@
         const val = document.getElementById('daysInput').value;
         if (val < 1) return;
         totalDays = parseInt(val);
-        localStorage.setItem('q_days_v6', totalDays);
-        completedDays = []; // إعادة تعيين التقدم عند تغيير الخطة كلياً
-        localStorage.setItem('q_done_v6', JSON.stringify(completedDays));
+        localStorage.setItem('q_days_v7', totalDays);
+        completedDays = [];
+        localStorage.setItem('q_done_v7', JSON.stringify(completedDays));
         renderGrids();
         updateProgressBar();
     }
