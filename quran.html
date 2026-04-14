@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مصحف الحفظ الذكي Pro - المتابع الذكي v9</title>
+    <title>مصحف الحفظ الذكي Pro - التسميع الغيبي</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #159895; --bg: #f8faf9; --text: #2c3333; }
         body { font-family: 'Amiri', serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; line-height: 2.3; }
@@ -28,15 +28,21 @@
         .memorize-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 2000; overflow-y: auto; padding: 20px; box-sizing: border-box; }
         .quran-text { text-align: center; padding: 20px; margin-bottom: 250px; cursor: default; min-height: 50vh; }
         
-        .ayah { display: inline-block; padding: 4px 12px; margin: 4px; border-radius: 12px; cursor: pointer; border: 1px solid #f0f0f0; transition: 0.3s; position: relative; }
-        .active-ayah { background: #d1fae5 !important; border-color: var(--accent) !important; font-weight: bold; transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .ayah { display: inline-block; padding: 4px 12px; margin: 4px; border-radius: 12px; border: 1px solid #f0f0f0; transition: 0.4s all ease; position: relative; opacity: 1; }
+        .active-ayah { background: #d1fae5 !important; border-color: var(--accent) !important; font-weight: bold; transform: scale(1.05); box-shadow: 0 4px 12px rgba(0,0,0,0.1); opacity: 1 !important; }
 
-        .blur .ayah-text { filter: blur(8px); user-select: none; opacity: 0.3; transition: 0.3s; }
-        .blur .active-ayah .ayah-text { filter: none; opacity: 1; }
+        /* وضع التسميع الغيبي: إخفاء الآيات التالية */
+        .reciting-mode .ayah { opacity: 0; pointer-events: none; }
+        .reciting-mode .ayah.revealed { opacity: 1; pointer-events: auto; }
+        .reciting-mode .active-ayah { opacity: 1; }
+
         .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; font-weight: bold; }
 
         .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
         .speech-status { font-size: 0.85rem; color: #1a5f7a; background: #e0f2f1; margin: 0 20px 8px; border-radius: 20px; min-height: 24px; padding: 5px 15px; display: inline-block; }
+        
+        .listening-active { animation: pulse 1.5s infinite; background: #2ecc71 !important; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 </head>
@@ -66,12 +72,10 @@
         <div id="speechStatus" class="speech-status">جاهز للتسميع...</div>
         <div class="controls-row" style="margin-bottom: 10px;">
             <button id="recBtn" class="btn-rec" onclick="toggleSpeech()" style="background: #ef4444; color: white; border:none; border-radius: 50px; padding: 10px 25px; font-weight: bold; cursor:pointer;">🎙️ بدء التسميع</button>
-            <button id="repeatBtn" onclick="toggleRepeat()" style="background:#eee; border:none; border-radius:10px; padding: 10px; cursor:pointer;">🔁 تكرار: <span id="repTxt">لا</span></button>
         </div>
         <audio id="audioElement" onended="handleAyahEnd()"></audio>
         <div class="btns">
-            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ استماع</button>
-            <button onclick="toggleBlur()" id="blurBtn" style="background:var(--primary); color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">👁️ إخفاء النص</button>
+            <button class="btn-play" onclick="togglePlay()" style="background: #f59e0b; color: white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">▶️ استماع للمراجعة</button>
             <button onclick="completeDay()" style="background:#2ecc71; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">✅ تم الحفظ</button>
             <button onclick="closeViewer()" style="background:#333; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer;">❌ إغلاق</button>
         </div>
@@ -84,12 +88,10 @@
     let completedDays = JSON.parse(localStorage.getItem('q_done_v9')) || [];
     let ayahsInView = [];
     let currentAyahIndex = 0;
-    let isRepeatEnabled = false;
     let recognition;
     let isListening = false;
     const audio = document.getElementById('audioElement');
 
-    // إعداد محرك التعرف على الكلام من جوجل (Web Speech API)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
@@ -100,22 +102,18 @@
         recognition.onresult = (event) => {
             let result = event.results[event.results.length - 1];
             let transcript = result[0].transcript.trim();
-            
             document.getElementById('speechStatus').innerText = "أسمعك: " + transcript;
-            
             if (result.isFinal) {
                 smartMatch(transcript.toLowerCase());
             }
         };
-
         recognition.onend = () => { if (isListening) recognition.start(); };
     }
 
-    // دالة التنظيف العميق للنصوص العربية
     function normalize(text) {
         if(!text) return "";
         return text
-            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") // إزالة التشكيل
+            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") 
             .replace(/[إأآا]/g, "ا")
             .replace(/ة/g, "ه")
             .replace(/ى/g, "ي")
@@ -123,31 +121,40 @@
             .trim();
     }
 
-    // منطق المطابقة الذكي
     function smartMatch(spokenText) {
         const cleanSpoken = normalize(spokenText);
         const spokenWords = cleanSpoken.split(" ");
         
-        // البحث في الآية الحالية والـ 5 آيات التالية
+        // البحث في نطاق الآيات القادمة فقط
         const start = currentAyahIndex;
         const end = Math.min(ayahsInView.length, currentAyahIndex + 6);
 
         for (let i = start; i < end; i++) {
             const ayah = ayahsInView[i];
-            const targetText = ayah.normalizedText;
-            
-            // المطابقة إذا كانت الآية تحتوي على آخر كلمة نطقتها أو أغلب الكلمات
             const lastWord = spokenWords[spokenWords.length - 1];
             
-            if (targetText.includes(lastWord) || targetText.includes(cleanSpoken)) {
-                if (currentAyahIndex !== i) {
-                    currentAyahIndex = i;
-                    highlightAyah(ayah.number);
-                    document.getElementById(ayah.elementId).scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
+            if (ayah.normalizedText.includes(lastWord) || ayah.normalizedText.includes(cleanSpoken)) {
+                revealToAyah(i);
                 return;
             }
         }
+    }
+
+    // دالة لإظهار الآيات حتى الوصول للآية الحالية
+    function revealToAyah(index) {
+        currentAyahIndex = index;
+        ayahsInView.forEach((ayah, i) => {
+            const el = document.getElementById(ayah.elementId);
+            if (i <= index) {
+                el.classList.add('revealed');
+            }
+            if (i === index) {
+                el.classList.add('active-ayah');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                el.classList.remove('active-ayah');
+            }
+        });
     }
 
     async function openViewer(dayIdx, start, end) {
@@ -155,6 +162,7 @@
         currentAyahIndex = 0;
         document.getElementById('mainUI').style.display = 'none';
         document.getElementById('viewer').style.display = 'block';
+        document.getElementById('quranContent').classList.remove('reciting-mode');
         const content = document.getElementById('quranContent');
         content.innerHTML = ""; ayahsInView = [];
         document.getElementById('loadingMsg').style.display = 'block';
@@ -163,14 +171,13 @@
             for (let p = start; p <= end; p++) {
                 const res = await fetch(`https://api.alquran.cloud/v1/page/${p}/quran-uthmani`);
                 const data = await res.json();
-                content.innerHTML += `<div style="color:var(--primary); font-weight:bold; margin:20px 0; font-size:1.2rem;">صفحة ${p}</div>`;
+                content.innerHTML += `<div class="page-header" style="color:var(--primary); font-weight:bold; margin:20px 0;">صفحة ${p}</div>`;
                 data.data.ayahs.forEach(ayah => {
                     const ayahId = `ayah-${ayah.number}`;
                     const span = document.createElement('span');
-                    span.className = 'ayah';
+                    span.className = 'ayah revealed'; // تبدأ ظاهرة في وضع المراجعة
                     span.id = ayahId;
                     span.innerHTML = `<span class="ayah-text">${ayah.text}</span><span class="ayah-num">﴿${ayah.numberInSurah}﴾</span>`;
-                    span.onclick = () => playAyah(ayah.number);
                     content.appendChild(span);
                     
                     ayahsInView.push({ 
@@ -180,47 +187,57 @@
                     });
                 });
             }
-            if(ayahsInView.length > 0) highlightAyah(ayahsInView[0].number);
-        } catch (e) { content.innerHTML = "خطأ في الاتصال بالسحاب."; }
+            revealToAyah(0);
+        } catch (e) { content.innerHTML = "خطأ في الاتصال بالخادم."; }
         document.getElementById('loadingMsg').style.display = 'none';
     }
 
-    function highlightAyah(num) {
-        document.querySelectorAll('.ayah').forEach(el => el.classList.remove('active-ayah'));
-        const active = document.getElementById(`ayah-${num}`);
-        if(active) active.classList.add('active-ayah');
-    }
-
     function toggleSpeech() {
-        if (!recognition) return alert("محرك البحث لا يدعم ميزة الصوت.");
+        if (!recognition) return alert("المتصفح لا يدعم التعرف على الصوت.");
+        
         if (!isListening) {
             isListening = true;
+            // تفعيل وضع التسميع (إخفاء الآيات) وإيقاف أي صوت خارجي
+            document.getElementById('quranContent').classList.add('reciting-mode');
+            audio.pause(); 
+            audio.currentTime = 0;
+
             recognition.start();
-            document.getElementById('recBtn').classList.add('listening');
+            document.getElementById('recBtn').classList.add('listening-active');
             document.getElementById('recBtn').innerText = "🛑 توقف";
+            document.getElementById('speechStatus').innerText = "بدأ التسميع.. اقرأ الآن";
         } else {
             isListening = false;
             recognition.stop();
-            document.getElementById('recBtn').classList.remove('listening');
+            document.getElementById('recBtn').classList.remove('listening-active');
             document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
         }
     }
 
     function playAyah(num) {
+        // إيقاف وضع التسميع عند طلب الاستماع الصوتي للمراجعة
+        document.getElementById('quranContent').classList.remove('reciting-mode');
+        isListening = false;
+        recognition.stop();
+        document.getElementById('recBtn').classList.remove('listening-active');
+        document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
+
         currentAyahIndex = ayahsInView.findIndex(a => a.number === num);
         audio.src = `https://cdn.islamic.network/quran/audio/128/ar.hudhaify/${num}.mp3`;
         audio.play();
-        highlightAyah(num);
+        revealToAyah(currentAyahIndex);
     }
 
     function togglePlay() {
-        if (audio.paused) { if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number); } 
-        else { audio.pause(); }
+        if (audio.paused) { 
+            if(ayahsInView.length > 0) playAyah(ayahsInView[currentAyahIndex].number); 
+        } else { 
+            audio.pause(); 
+        }
     }
 
     function handleAyahEnd() {
-        if (isRepeatEnabled) { audio.currentTime = 0; audio.play(); } 
-        else if (currentAyahIndex < ayahsInView.length - 1) {
+        if (currentAyahIndex < ayahsInView.length - 1) {
             currentAyahIndex++;
             playAyah(ayahsInView[currentAyahIndex].number);
         }
@@ -271,18 +288,12 @@
         closeViewer(); renderGrids(); updateProgressBar();
     }
 
-    function toggleBlur() {
-        const content = document.getElementById('quranContent');
-        content.classList.toggle('blur');
-        document.getElementById('blurBtn').innerText = content.classList.contains('blur') ? "👁️ إظهار" : "👁️ إخفاء";
-    }
-
     function closeViewer() {
         isListening = false; if(recognition) recognition.stop();
         document.getElementById('mainUI').style.display = 'block';
         document.getElementById('viewer').style.display = 'none';
         audio.pause();
-        document.getElementById('recBtn').classList.remove('listening');
+        document.getElementById('recBtn').classList.remove('listening-active');
         document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
     }
 
@@ -291,11 +302,6 @@
         document.getElementById('reviewSection').style.display = tab === 'review' ? 'block' : 'none';
         document.getElementById('tabHifz').classList.toggle('active', tab === 'hifz');
         document.getElementById('tabReview').classList.toggle('active', tab === 'review');
-    }
-
-    function toggleRepeat() {
-        isRepeatEnabled = !isRepeatEnabled;
-        document.getElementById('repTxt').innerText = isRepeatEnabled ? "نعم" : "لا";
     }
 
     window.onload = init;
