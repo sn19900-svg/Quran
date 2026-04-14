@@ -104,7 +104,6 @@
     let currentFontSize = 24;
     let recognition;
     let isListening = false;
-    let lastProcessedTranscript = ""; 
     const audio = document.getElementById('audioElement');
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -120,16 +119,14 @@
                 currentTranscript += event.results[i][0].transcript;
             }
             
-            // عرض حالة الكلام للمستخدم (آخر 3 كلمات)
             document.getElementById('speechStatus').innerText = "أسمعك: " + currentTranscript.split(' ').slice(-3).join(' ');
             
-            // محاولة مطابقة الكلام التنبؤي
             if (isListening) {
                 attemptSmartMatch(currentTranscript.toLowerCase());
             }
         };
 
-        // إعادة التشغيل بصمت لتجنب نغمة التنبيه
+        // إعادة التشغيل بصمت لتقليل نغمة النظام
         recognition.onend = () => { 
             if (isListening) recognition.start(); 
         };
@@ -152,7 +149,6 @@
         const targetAyah = ayahsInView[currentAyahIndex];
         const targetWords = targetAyah.normalizedText.split(" ");
         
-        // التحقق من نسبة وجود كلمات الآية في النص المنطوق
         let matchCount = 0;
         targetWords.forEach(word => {
             if (cleanSpoken.includes(word)) matchCount++;
@@ -160,11 +156,12 @@
 
         const matchRatio = matchCount / targetWords.length;
 
-        // إذا تطابق 40% من الكلمات (كافٍ للتنبؤ في الآيات الطويلة)
-        if (matchRatio >= 0.4) {
+        // عتبة المطابقة 70% للانتقال التلقائي
+        if (matchRatio >= 0.7) {
             revealAyahSequential(currentAyahIndex);
             currentAyahIndex++;
-            // لا نصفر النص هنا للسماح بإكمال الآيات المتتالية بسرعة
+            // تحديث حالة الكلام لإعطاء تنبيه بصري بالنجاح
+            document.getElementById('speechStatus').innerText = "ممتاز.. أكمل الآية التالية";
         }
     }
 
@@ -172,12 +169,10 @@
         const ayah = ayahsInView[index];
         const el = document.getElementById(ayah.elementId);
         
-        // تأثير الظهور (مثل القارئ)
         el.classList.add('revealed');
         document.querySelectorAll('.ayah').forEach(a => a.classList.remove('active-ayah'));
         el.classList.add('active-ayah');
         
-        // التمرير التلقائي
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -223,14 +218,13 @@
             currentAyahIndex = 0;
             audio.pause();
             
-            // تفعيل وضع التسميع (إخفاء الكل)
             document.getElementById('quranContent').classList.add('reciting-mode');
             document.querySelectorAll('.ayah').forEach(el => el.classList.remove('revealed', 'active-ayah'));
             
             recognition.start();
             document.getElementById('recBtn').classList.add('listening-active');
             document.getElementById('recBtn').innerText = "🛑 إيقاف التسميع";
-            document.getElementById('speechStatus').innerText = "تحدث الآن.. سأظهر الآيات فور سماعها";
+            document.getElementById('speechStatus').innerText = "أنا أسمعك.. ابدأ القراءة";
         } else {
             stopListening();
         }
@@ -243,7 +237,6 @@
         document.getElementById('recBtn').innerText = "🎙️ بدء التسميع";
         document.getElementById('quranContent').classList.remove('reciting-mode');
         document.querySelectorAll('.ayah').forEach(el => el.classList.add('revealed'));
-        document.getElementById('speechStatus').innerText = "جاهز...";
     }
 
     function playAyah(num) {
