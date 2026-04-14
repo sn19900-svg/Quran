@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مصحف الحفظ الذكي Pro - النسخة المصلحة</title>
+    <title>مصحف الحفظ الذكي Pro - المتابع الذكي</title>
     <style>
         :root { --primary: #1a5f7a; --accent: #159895; --bg: #f8faf9; --text: #2c3333; }
         body { font-family: 'Amiri', serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; line-height: 2.3; }
@@ -36,7 +36,7 @@
         .ayah-num { font-size: 0.9em; color: var(--accent); margin-right: 5px; font-weight: bold; }
 
         .audio-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-top: 2px solid #eee; padding: 15px 0; box-shadow: 0 -5px 25px rgba(0,0,0,0.1); text-align: center; z-index: 2100; }
-        .speech-status { font-size: 0.9rem; color: #d35400; font-weight: bold; margin-bottom: 8px; height: 24px; padding: 0 10px; }
+        .speech-status { font-size: 0.9rem; color: #d35400; font-weight: bold; margin-bottom: 8px; min-height: 24px; padding: 0 10px; }
         .btn-rec.listening { background: #2ecc71 !important; animation: pulse 1.5s infinite; color: white; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(46, 204, 113, 0); } 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0); } }
     </style>
@@ -83,15 +83,14 @@
 
 <script>
     const totalPages = 604;
-    let totalDays = parseInt(localStorage.getItem('q_days_v7')) || 180;
-    let completedDays = JSON.parse(localStorage.getItem('q_done_v7')) || [];
+    let totalDays = parseInt(localStorage.getItem('q_days_v8')) || 180;
+    let completedDays = JSON.parse(localStorage.getItem('q_done_v8')) || [];
     let ayahsInView = [];
     let currentAyahIndex = 0;
     let isRepeatEnabled = false;
     let currentFontSize = 24;
     let recognition;
     let isListening = false;
-    let accumulatedTranscript = ""; // تجميع النص لضمان عدم الضياع
     const audio = document.getElementById('audioElement');
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -102,17 +101,18 @@
         recognition.lang = 'ar-SA';
 
         recognition.onresult = (event) => {
-            let interimTranscript = "";
+            let transcript = "";
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    accumulatedTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
-                }
+                transcript += event.results[i][0].transcript;
             }
-            const fullText = accumulatedTranscript + interimTranscript;
-            document.getElementById('speechStatus').innerText = "أسمعك: " + (interimTranscript || accumulatedTranscript.slice(-20));
-            matchSpeechToAyah(fullText);
+            
+            // عرض آخر كلمات تم نطقها فقط للجمالية
+            const words = transcript.trim().split(" ");
+            const lastWords = words.slice(-4).join(" ");
+            document.getElementById('speechStatus').innerText = "أسمعك: " + lastWords;
+            
+            // إرسال النص الكامل للمطابقة
+            matchSpeechToAyah(transcript.toLowerCase());
         };
 
         recognition.onend = () => { if (isListening) recognition.start(); };
@@ -147,19 +147,20 @@
         return div;
     }
 
-    // تنظيف النص العربي بشكل احترافي للمطابقة
+    // دالة تنظيف النص العربي محسنة جداً
     function cleanArabic(text) {
         return text
-            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") // إزالة التشكيل وعلامات الوقف
+            .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "") // إزالة التشكيل والرموز الصغيرة
             .replace(/[إأآا]/g, "ا")
             .replace(/ة/g, "ه")
-            .replace(/\s+/g, "");
+            .replace(/ى/g, "ي")
+            .replace(/[^\u0621-\u064A\s]/g, "") // حذف أي رمز غير عربي (مثل علامات الآيات)
+            .trim();
     }
 
     async function openViewer(dayIdx, start, end, isReview) {
         window.activeDay = dayIdx;
         currentAyahIndex = 0;
-        accumulatedTranscript = "";
         document.getElementById('mainUI').style.display = 'none';
         document.getElementById('viewer').style.display = 'block';
         const content = document.getElementById('quranContent');
@@ -179,7 +180,14 @@
                     span.innerHTML = `<span class="ayah-text">${ayah.text}</span><span class="ayah-num">﴿${ayah.numberInSurah}﴾</span>`;
                     span.onclick = () => playAyah(ayah.number);
                     content.appendChild(span);
-                    ayahsInView.push({ number: ayah.number, text: cleanArabic(ayah.text), elementId: ayahId });
+                    
+                    // تخزين الكلمات كصفوف للمطابقة المرنة
+                    ayahsInView.push({ 
+                        number: ayah.number, 
+                        text: cleanArabic(ayah.text),
+                        words: cleanArabic(ayah.text).split(" "),
+                        elementId: ayahId 
+                    });
                 });
             }
             if(ayahsInView.length > 0) highlightAyah(ayahsInView[0].number);
@@ -187,24 +195,29 @@
         document.getElementById('loadingMsg').style.display = 'none';
     }
 
-    function matchSpeechToAyah(spoken) {
-        const cleanSpoken = cleanArabic(spoken);
-        // البحث في نطاق 7 آيات قادمة لمرونة أكبر
-        const searchRange = 7;
-        const start = currentAyahIndex;
-        const end = Math.min(ayahsInView.length, currentAyahIndex + searchRange);
+    function matchSpeechToAyah(spokenTranscript) {
+        if (!spokenTranscript) return;
+        
+        const cleanSpoken = cleanArabic(spokenTranscript);
+        const spokenWords = cleanSpoken.split(" ");
+        
+        // نبحث في الآية الحالية والـ 5 آيات القادمة فقط
+        const lookAhead = 5;
+        const startSearch = currentAyahIndex;
+        const endSearch = Math.min(ayahsInView.length, currentAyahIndex + lookAhead);
 
-        for (let i = start; i < end; i++) {
-            const target = ayahsInView[i].text;
-            // التحقق مما إذا كان الكلام المسموع يحتوي على جزء كبير من الآية (أول 12 حرف)
-            if (cleanSpoken.includes(target.substring(0, 12))) {
+        for (let i = startSearch; i < endSearch; i++) {
+            const ayah = ayahsInView[i];
+            // خوارزمية بسيطة: إذا كانت آخر كلمتين نطقتهما موجودتان في هذه الآية، انتقل إليها
+            const lastTwoWords = spokenWords.slice(-2).join(" ");
+            const lastWord = spokenWords[spokenWords.length - 1];
+
+            if (ayah.text.includes(lastTwoWords) || ayah.words.includes(lastWord)) {
                 if (currentAyahIndex !== i) {
                     currentAyahIndex = i;
-                    highlightAyah(ayahsInView[i].number);
-                    const el = document.getElementById(ayahsInView[i].elementId);
+                    highlightAyah(ayah.number);
+                    const el = document.getElementById(ayah.elementId);
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // تفريغ النص المتراكم جزئياً عند الانتقال لآية جديدة لمنع البطء
-                    if (accumulatedTranscript.length > 100) accumulatedTranscript = accumulatedTranscript.slice(-50);
                 }
                 break;
             }
@@ -221,11 +234,9 @@
         if (!recognition) return alert("المتصفح لا يدعم الميكروفون.");
         if (!isListening) {
             isListening = true;
-            accumulatedTranscript = "";
             recognition.start();
             document.getElementById('recBtn').classList.add('listening');
             document.getElementById('recBtn').innerText = "🛑 توقف";
-            if(!audio.paused) audio.pause();
         } else {
             isListening = false;
             recognition.stop();
@@ -257,22 +268,19 @@
     function completeDay() {
         if (!completedDays.includes(window.activeDay)) {
             completedDays.push(window.activeDay);
-            localStorage.setItem('q_done_v7', JSON.stringify(completedDays));
+            localStorage.setItem('q_done_v8', JSON.stringify(completedDays));
         }
-        closeViewer();
-        renderGrids();
-        updateProgressBar();
+        closeViewer(); renderGrids(); updateProgressBar();
     }
 
     function updateDuration() {
         const val = document.getElementById('daysInput').value;
         if (val < 1) return;
         totalDays = parseInt(val);
-        localStorage.setItem('q_days_v7', totalDays);
+        localStorage.setItem('q_days_v8', totalDays);
         completedDays = [];
-        localStorage.setItem('q_done_v7', JSON.stringify(completedDays));
-        renderGrids();
-        updateProgressBar();
+        localStorage.setItem('q_done_v8', "[]");
+        renderGrids(); updateProgressBar();
     }
 
     function updateProgressBar() {
@@ -287,8 +295,7 @@
     }
 
     function closeViewer() {
-        isListening = false;
-        if(recognition) recognition.stop();
+        isListening = false; if(recognition) recognition.stop();
         document.getElementById('mainUI').style.display = 'block';
         document.getElementById('viewer').style.display = 'none';
         audio.pause();
